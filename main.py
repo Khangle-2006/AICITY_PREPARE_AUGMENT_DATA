@@ -134,12 +134,84 @@ def merge_all_labels(label_files, output_file):
     # Save merged file
     os.makedirs(os.path.dirname(output_file), exist_ok=True)
     with open(output_file, 'wb') as f:
-        f.write(orjson.dumps(merged_coco))
+        f.write(orjson.dumps(merged_coco), option=orjson.OPT_INDENT_2)
     
     print(f"Merged labels saved to {output_file}")
     print(f"Total: {len(merged_coco['images'])} images, {len(merged_coco['annotations'])} annotations")
     
     return output_file
+
+def clean_labels_file(input_file, output_file):
+    """Remove images and annotations with '_E_' or '_N_' in filename from a single label file and reassign IDs."""
+    print(f"Cleaning labels file: {input_file}")
+    
+    try:
+        with open(input_file, 'rb') as f:
+            data = orjson.loads(f.read())
+        
+        # Filter images and reassign IDs
+        original_image_count = len(data.get("images", []))
+        filtered_images = []
+        old_to_new_image_id = {}
+        current_image_id = 1
+        
+        for img in data.get("images", []):
+            filename = img.get("file_name", "")
+            
+            # Skip images with '_E_' or '_N_' in filename
+            if '_E_' in filename or '_N_' in filename:
+                continue
+            
+            # Create new image with reassigned ID
+            old_id = img["id"]
+            new_img = img.copy()
+            new_img["id"] = current_image_id
+            old_to_new_image_id[old_id] = current_image_id
+            
+            filtered_images.append(new_img)
+            current_image_id += 1
+        
+        # Filter annotations and reassign IDs
+        original_ann_count = len(data.get("annotations", []))
+        filtered_annotations = []
+        current_ann_id = 1
+        
+        for ann in data.get("annotations", []):
+            old_image_id = ann["image_id"]
+            
+            # Only keep annotations for remaining images
+            if old_image_id in old_to_new_image_id:
+                new_ann = ann.copy()
+                new_ann["id"] = current_ann_id
+                new_ann["image_id"] = old_to_new_image_id[old_image_id]
+                filtered_annotations.append(new_ann)
+                current_ann_id += 1
+        
+        # Create cleaned data
+        cleaned_data = {
+            "images": filtered_images,
+            "annotations": filtered_annotations,
+            "categories": data.get("categories", [])
+        }
+        
+        # Save cleaned file
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        with open(output_file, 'wb') as f:
+            f.write(orjson.dumps(cleaned_data, option=orjson.OPT_INDENT_2))
+        
+        removed_image_count = original_image_count - len(filtered_images)
+        removed_ann_count = original_ann_count - len(filtered_annotations)
+        
+        print(f"Cleaned labels saved to {output_file}")
+        print(f"Removed {removed_image_count} images and {removed_ann_count} annotations")
+        print(f"Reassigned IDs for {len(filtered_images)} images and {len(filtered_annotations)} annotations")
+        print(f"Final: {len(filtered_images)} images, {len(filtered_annotations)} annotations")
+        
+    except Exception as e:
+        print(f"Error cleaning {input_file}: {e}")
+        return False
+    
+    return True
 
 def main():
     parser = argparse.ArgumentParser(description='Generate pseudo labels and nighttime images')
@@ -172,11 +244,11 @@ def main():
     print("Merging label files...")
     
     # Merge all training labels into one file
-    merged_train_labels = os.path.join(TRAIN_OUTPUT_DIR, 'train.json')
+    merged_train_labels = os.path.join(TRAIN_OUTPUT_DIR, 'train_before_filter.json')
     merge_all_labels(TRAIN_LABELS, merged_train_labels)
     
     # Merge all test labels into one file
-    merged_test_labels = os.path.join(TEST_OUTPUT_DIR, 'test.json')
+    merged_test_labels = os.path.join(TEST_OUTPUT_DIR, 'test_before_filter.json')
     merge_all_labels(TEST_LABELS, merged_test_labels)
         
 
@@ -243,8 +315,11 @@ def main():
         labels_dict=TEST_LABELS,
     )
     
+    # Remove fisheye8k nighttime images in the day directory
+    clean_labels_file(merged_train_labels, os.path.join(NIGHT_TRAIN_DIR, 'train.json'))
+    clean_labels_file(merged_test_labels, os.path.join(NIGHT_TEST_DIR, 'test.json'))
     
-    
+    print("Nighttime images generated and labels cleaned.")
     print("All done! Day and night datasets generated.")
     print(f"Day dataset: {DAY_DIR}")
     print(f"Night dataset: {NIGHT_DIR}")
