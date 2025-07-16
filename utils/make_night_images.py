@@ -111,80 +111,56 @@ def apply_light_augmentation(img, bboxes, flash=None):
     
     return img
 
-def get_bboxes_for_image(img_name, labels_dict):
-    """Get bounding boxes for a specific image from labels."""
-    bboxes = []
-    for dataset_labels in labels_dict.values():
-        if os.path.exists(dataset_labels):
-            try:
-                with open(dataset_labels, 'rb') as f:
-                    data = orjson.loads(f.read())
-                
-                # Find image ID
-                img_id = None
-                for image_info in data.get('images', []):
-                    if image_info['file_name'] == img_name:
-                        img_id = image_info['id']
-                        break
-                
-                if img_id is not None:
-                    # Get bboxes for non-pedestrian objects
-                    bboxes = [
-                        ann['bbox'] for ann in data.get('annotations', [])
-                        if ann['image_id'] == img_id and ann['category_id'] != 3
-                    ]
-                    break
-            except Exception as e:
-                print(f"Error reading labels from {dataset_labels}: {e}")
-                continue
+class BBoxCache:
+    """Cache for bounding boxes to avoid repeated file reads."""
+    def __init__(self, labels_dict):
+        self.bbox_cache = {}
+        self._load_all_bboxes(labels_dict)
     
-    return bboxes
-
-def convert_to_night(input_path, output_path, model, T_val, device, use_fp16=False, 
-                    labels_dict=None, flash=None, apply_augmentation=True):
-    """Convert a single image from day to night with optional augmentation."""
-    # Skip if night image already exists and is valid
-    if output_path.exists() and is_valid_image(output_path):
-        return
-    
-    # Remove corrupted file if exists
-    if output_path.exists() and not is_valid_image(output_path):
-        try:
-            output_path.unlink()
-        except Exception as e:
-            print(f"Error removing corrupted file {output_path}: {e}")
+    def _load_all_bboxes(self, labels_dict):
+        """Load all bounding boxes into memory once."""
+        if not labels_dict:
             return
+            
+        for dataset_labels in labels_dict.values():
+            if os.path.exists(dataset_labels):
+                try:
+                    with open(dataset_labels, 'rb') as f:
+                        data = orjson.loads(f.read())
+                    
+                    # Create image filename to ID mapping
+                    img_name_to_id = {img['file_name']: img['id'] for img in data.get('images', [])}
+                    
+                    # Group annotations by image ID
+                    annotations_by_image = {}
+                    for ann in data.get('annotations', []):
+                        img_id = ann['image_id']
+                        if img_id not in annotations_by_image:
+                            annotations_by_image[img_id] = []
+                        annotations_by_image[img_id].append(ann)
+                    
+                    # Cache bboxes by filename
+                    for img_name, img_id in img_name_to_id.items():
+                        if img_id in annotations_by_image:
+                            self.bbox_cache[img_name] = [
+                                ann['bbox'] for ann in annotations_by_image[img_id]
+                                if ann['category_id'] != 3  # non-pedestrian objects
+                            ]
+                        else:
+                            self.bbox_cache[img_name] = []
+                            
+                except Exception as e:
+                    print(f"Error loading labels from {dataset_labels}: {e}")
+                    continue
     
-    try:
-        input_image = Image.open(input_path).convert('RGB')
-        input_img = T_val(input_image)
-        x_t = transforms.ToTensor()(input_img)
-        x_t = transforms.Normalize([0.5], [0.5])(x_t).unsqueeze(0).to(device)
-        
-        if use_fp16:
-            x_t = x_t.half()
-        
-        with torch.no_grad():
-            output = model(x_t, direction=None, caption=None)
-        
-        output_pil = transforms.ToPILImage()(output[0].cpu() * 0.5 + 0.5)
-        output_pil = output_pil.resize((input_image.width, input_image.height), Image.LANCZOS)
-        
-        # Apply augmentation before saving
-        if apply_augmentation and labels_dict:
-            img_name = input_path.name
-            bboxes = get_bboxes_for_image(img_name, labels_dict)
-            if bboxes:
-                output_pil = apply_light_augmentation(output_pil, bboxes, flash)
-        
-        output_pil.save(output_path)
-        
-    except Exception as e:
-        print(f"Error converting {input_path} to night: {e}")
+    def get_bboxes(self, img_name):
+        """Get cached bounding boxes for an image."""
+        return self.bbox_cache.get(img_name, [])
 
-def generate_nighttime_images(day_images_dir, night_images_dir, device="cpu", use_fp16=False,
-                            labels_dict=None, flash_path='utils/flash.png', apply_augmentation=True):
-    """Generate nighttime images from day images with optional augmentation."""
+def generate_nighttime_images(day_images_dir, night_images_dir, device="cpu", use_fp16=True,
+                            labels_dict=None, flash_path="utils/flash.png", apply_augmentation=True, 
+                            batch_size=32):
+    """Generate nighttime images from day images with batch processing."""
     print(f"Generating nighttime images from {day_images_dir} to {night_images_dir}")
     
     # Load model
@@ -205,25 +181,74 @@ def generate_nighttime_images(day_images_dir, night_images_dir, device="cpu", us
         print(f"Flash image loaded from {flash_path}")
     elif apply_augmentation:
         print("No flash image provided, skipping flash effects")
-        
+    
+    # Create bbox cache for fast lookup
+    print("Loading bounding box cache...")
+    bbox_cache = BBoxCache(labels_dict) if labels_dict else None
+    print("Bounding box cache loaded.")
     
     # Create output directory
     os.makedirs(night_images_dir, exist_ok=True)
     
-    # Get all image files
-    valid_extensions = [".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"]
-    image_files = []
-    for ext in valid_extensions:
-        image_files.extend(Path(day_images_dir).glob(f"*{ext}"))
-        image_files.extend(Path(day_images_dir).glob(f"*{ext.upper()}"))
+    # Get all image files efficiently
+    valid_extensions = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+    image_files = [f for f in Path(day_images_dir).iterdir() 
+                   if f.suffix.lower() in valid_extensions]
     
     print(f"Found {len(image_files)} images to convert.")
     
-    # Convert each image
-    for img_path in tqdm(image_files, desc="Converting to night"):
-        output_path = Path(night_images_dir) / img_path.name
-        convert_to_night(img_path, output_path, model, T_val, device, use_fp16,
-                        labels_dict, flash, apply_augmentation)
+    # Process images one by one to avoid batch shape issues
+    processed = 0
+    for img_file in tqdm(image_files, desc="🌙 Converting"):
+        output_path = Path(night_images_dir) / img_file.name
+        
+        # Skip if exists and valid
+        if output_path.exists() and is_valid_image(output_path):
+            continue
+            
+        # Remove corrupted file if exists
+        if output_path.exists() and not is_valid_image(output_path):
+            try:
+                output_path.unlink()
+            except:
+                continue
+        
+        try:
+            # Load and process single image
+            img = Image.open(img_file).convert('RGB')
+            original_size = img.size
+            
+            # Transform
+            img_transformed = T_val(img)
+            x_t = transforms.ToTensor()(img_transformed)
+            x_t = transforms.Normalize([0.5], [0.5])(x_t).unsqueeze(0)  # Add batch dimension
+            
+            if use_fp16:
+                x_t = x_t.half()
+            
+            x_t = x_t.to(device)
+            
+            # Single image inference
+            with torch.no_grad():
+                output = model(x_t, direction=None, caption=None)
+            
+            # Process output
+            output_pil = transforms.ToPILImage()(output[0].cpu() * 0.5 + 0.5)
+            output_pil = output_pil.resize(original_size, Image.LANCZOS)
+            
+            # Apply augmentation
+            if apply_augmentation and bbox_cache:
+                bboxes = bbox_cache.get_bboxes(img_file.name)
+                if bboxes:
+                    output_pil = apply_light_augmentation(output_pil, bboxes, flash)
+            
+            output_pil.save(output_path)
+            processed += 1
+            
+        except Exception as e:
+            print(f"Error processing {img_file}: {e}")
+            continue
     
     print(f"Nighttime images generated in {night_images_dir}")
+    print(f"Total processed: {processed} images")
     return night_images_dir

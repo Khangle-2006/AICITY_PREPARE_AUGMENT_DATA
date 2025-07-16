@@ -44,7 +44,8 @@ def generate_labels(args, DATA, OUTPUT_DIR):
                 checkpoint_file=args.codetr,
                 images_dir=images_dir,
                 output_file=output_label_file,
-                device=args.device
+                device=args.device,
+                batch_size=32,
             )
             
             if dataset == "LOAF":
@@ -253,6 +254,7 @@ def main():
         
 
     # Copy images to output directories
+    print("Copying images to output directories...")
     TRAIN_IMAGES_DIR = os.path.join(TRAIN_OUTPUT_DIR, 'images')
     os.makedirs(TRAIN_IMAGES_DIR, exist_ok=True)
     for dataset, label_file in TRAIN_LABELS.items():
