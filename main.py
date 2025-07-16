@@ -39,13 +39,13 @@ def generate_labels(args, DATA, OUTPUT_DIR):
         print(f"Processing dataset: {dataset}")
         
         if not label_file or dataset == "LOAF":
-            # generate_pseudo_labels(
-            #     config_file="config/CO-DETR/projects/CO-DETR/configs/codino/train_all.py",
-            #     checkpoint_file=args.codetr,
-            #     images_dir=images_dir,
-            #     output_file=output_label_file,
-            #     device=args.device
-            # )
+            generate_pseudo_labels(
+                config_file="config/CO-DETR/projects/CO-DETR/configs/codino/train_all.py",
+                checkpoint_file=args.codetr,
+                images_dir=images_dir,
+                output_file=output_label_file,
+                device=args.device
+            )
             
             if dataset == "LOAF":
                 if label_file and os.path.exists(label_file):
