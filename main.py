@@ -242,6 +242,9 @@ def main():
         use_fp16=True,
         labels_dict=TEST_LABELS,
     )
+    
+    
+    
     print("All done! Day and night datasets generated.")
     print(f"Day dataset: {DAY_DIR}")
     print(f"Night dataset: {NIGHT_DIR}")
