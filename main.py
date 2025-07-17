@@ -233,54 +233,54 @@ def main():
     check_data_integrity(TEST_DATA, TEST_OUTPUT_DIR)
     
     # Generate pseudo labels for training and testing datasets
-    TRAIN_LABELS = generate_labels(args, TRAIN_DATA, TRAIN_OUTPUT_DIR)
-    TEST_LABELS = generate_labels(args, TEST_DATA, TEST_OUTPUT_DIR)
+    # TRAIN_LABELS = generate_labels(args, TRAIN_DATA, TRAIN_OUTPUT_DIR)
+    # TEST_LABELS = generate_labels(args, TEST_DATA, TEST_OUTPUT_DIR)
     
     print("Generated labels for training and testing datasets.")
-    print("Training labels:", TRAIN_LABELS)
-    print("Testing labels:", TEST_LABELS)
+    # print("Training labels:", TRAIN_LABELS)
+    # print("Testing labels:", TEST_LABELS)
     
     #Merge labels for training and testing datasets
     print("Merging label files...")
     
     # Merge all training labels into one file
     merged_train_labels = os.path.join(TRAIN_OUTPUT_DIR, 'train_before_filter.json')
-    merge_all_labels(TRAIN_LABELS, merged_train_labels)
+    # merge_all_labels(TRAIN_LABELS, merged_train_labels)
     
     # Merge all test labels into one file
     merged_test_labels = os.path.join(TEST_OUTPUT_DIR, 'test_before_filter.json')
-    merge_all_labels(TEST_LABELS, merged_test_labels)
+    # merge_all_labels(TEST_LABELS, merged_test_labels)
         
 
     # Copy images to output directories
     print("Copying images to output directories...")
     TRAIN_IMAGES_DIR = os.path.join(TRAIN_OUTPUT_DIR, 'images')
     os.makedirs(TRAIN_IMAGES_DIR, exist_ok=True)
-    for dataset, label_file in TRAIN_LABELS.items():
-        with open(label_file, 'rb') as f:
-            labels = orjson.loads(f.read())
-        images_dir = TRAIN_DATA[dataset]["images_dir"]
-        for img in tqdm(labels.get("images", [])):
-            img_path = os.path.join(images_dir, img["file_name"])
-            target_path = os.path.join(TRAIN_IMAGES_DIR, img["file_name"])
-            if os.path.exists(img_path):
-                fast_copy(img_path, target_path)
-            else:
-                print(f"Warning: Image {img_path} does not exist, skipping.")
+    # for dataset, label_file in TRAIN_LABELS.items():
+    #     with open(label_file, 'rb') as f:
+    #         labels = orjson.loads(f.read())
+    #     images_dir = TRAIN_DATA[dataset]["images_dir"]
+    #     for img in tqdm(labels.get("images", [])):
+    #         img_path = os.path.join(images_dir, img["file_name"])
+    #         target_path = os.path.join(TRAIN_IMAGES_DIR, img["file_name"])
+    #         if os.path.exists(img_path):
+    #             fast_copy(img_path, target_path)
+    #         else:
+    #             print(f"Warning: Image {img_path} does not exist, skipping.")
                 
     TEST_IMAGES_DIR = os.path.join(TEST_OUTPUT_DIR, 'images')
     os.makedirs(TEST_IMAGES_DIR, exist_ok=True)
-    for dataset, label_file in TEST_LABELS.items():
-        with open(label_file, 'rb') as f:
-            labels = orjson.loads(f.read())
-        images_dir = TEST_DATA[dataset]["images_dir"]
-        for img in tqdm(labels.get("images", [])):
-            img_path = os.path.join(images_dir, img["file_name"])
-            target_path = os.path.join(TEST_IMAGES_DIR, img["file_name"])
-            if os.path.exists(img_path):
-                fast_copy(img_path, target_path)
-            else:
-                print(f"Warning: Image {img_path} does not exist, skipping.")
+    # for dataset, label_file in TEST_LABELS.items():
+    #     with open(label_file, 'rb') as f:
+    #         labels = orjson.loads(f.read())
+    #     images_dir = TEST_DATA[dataset]["images_dir"]
+    #     for img in tqdm(labels.get("images", [])):
+    #         img_path = os.path.join(images_dir, img["file_name"])
+    #         target_path = os.path.join(TEST_IMAGES_DIR, img["file_name"])
+    #         if os.path.exists(img_path):
+    #             fast_copy(img_path, target_path)
+    #         else:
+    #             print(f"Warning: Image {img_path} does not exist, skipping.")
     
     
     # Generate nighttime images
@@ -298,27 +298,27 @@ def main():
     fast_copy(merged_test_labels, os.path.join(NIGHT_TEST_DIR, 'test.json'))
     
     print("Starting nighttime image generation for training data...")
-    generate_nighttime_images(
-        day_images_dir=TRAIN_IMAGES_DIR,
-        night_images_dir=NIGHT_TRAIN_IMAGES_DIR,
-        device=args.device,
-        use_fp16=True,
-        labels_dict=TRAIN_LABELS,
-    )
+    # generate_nighttime_images(
+    #     day_images_dir=TRAIN_IMAGES_DIR,
+    #     night_images_dir=NIGHT_TRAIN_IMAGES_DIR,
+    #     device=args.device,
+    #     use_fp16=True,
+    #     labels_dict=TRAIN_LABELS,
+    # )
     
     # Generate nighttime images for test data
     print("Starting nighttime image generation for test data...")
-    generate_nighttime_images(
-        day_images_dir=TEST_IMAGES_DIR,
-        night_images_dir=NIGHT_TEST_IMAGES_DIR,
-        device=args.device,
-        use_fp16=True,
-        labels_dict=TEST_LABELS,
-    )
+    # generate_nighttime_images(
+    #     day_images_dir=TEST_IMAGES_DIR,
+    #     night_images_dir=NIGHT_TEST_IMAGES_DIR,
+    #     device=args.device,
+    #     use_fp16=True,
+    #     labels_dict=TEST_LABELS,
+    # )
     
     # Remove fisheye8k nighttime images in the day directory
-    clean_labels_file(merged_train_labels, os.path.join(TEST_OUTPUT_DIR, 'train.json'))
-    clean_labels_file(merged_test_labels, os.path.join(NIGHT_TEST_DIR, 'test.json'))
+    clean_labels_file(merged_train_labels, os.path.join(TRAIN_OUTPUT_DIR, 'train.json'))
+    clean_labels_file(merged_test_labels, os.path.join(TEST_OUTPUT_DIR, 'test.json'))
     
     print("Nighttime images generated and labels cleaned.")
     print("All done! Day and night datasets generated.")
