@@ -294,8 +294,8 @@ def main():
     os.makedirs(NIGHT_TRAIN_IMAGES_DIR, exist_ok=True)
     os.makedirs(NIGHT_TEST_IMAGES_DIR, exist_ok=True)
     
-    fast_copy(merged_train_labels, os.path.join(NIGHT_TRAIN_DIR, 'train.json'))
-    fast_copy(merged_test_labels, os.path.join(NIGHT_TEST_DIR, 'test.json'))
+    fast_copy(merged_train_labels, os.path.join(TRAIN_OUTPUT_DIR, 'train.json'))
+    fast_copy(merged_test_labels, os.path.join(TRAIN_OUTPUT_DIR, 'test.json'))
     
     print("Starting nighttime image generation for training data...")
     generate_nighttime_images(
