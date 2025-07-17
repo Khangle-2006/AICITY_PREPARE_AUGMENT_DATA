@@ -45,7 +45,6 @@ def generate_labels(args, DATA, OUTPUT_DIR):
                 images_dir=images_dir,
                 output_file=output_label_file,
                 device=args.device,
-                batch_size=32,
             )
             
             if dataset == "LOAF":
