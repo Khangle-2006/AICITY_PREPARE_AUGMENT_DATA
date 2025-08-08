@@ -108,5 +108,5 @@ outputs/
 ```
 
 ### Checkpoints
-To reproduce results quickly, download pretrained checkpoints from the link below and place them in the ./checkpoints/ folder:
+To reproduce results quickly, download pretrained checkpoints from the link below and place them in the ./checkpoints/ command:
 - [checkpoints](https://drive.google.com/drive/folders/1YxW_lkI8XrGQwToi9tFb6oMvcMPilBdJ?usp=sharing)
